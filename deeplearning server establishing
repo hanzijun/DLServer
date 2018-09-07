@@ -1,0 +1,138 @@
+搭建深度学习服务器流程：
+系统要求：ubuntu 16.04 + CUDA 9.0 
+深度学习框架：tensorflow GPU
+依赖：cudnn 7.0
+具体流程如下：
+1.检查GPU是否CUDA-capable
+$ lspci | grep -i nvidia
+
+2.下载安装包
+NVIDIA-Linux-x86_64-390.87.run (驱动链接：http://www.geforce.cn/drivers/results/123918)
+cuda_9.0.103_384.59_linux.run (CUDA官网链接：https://developer.nvidia.com/cuda-downloads)
+cudnnv7.0 (链接：https://developer.nvidia.com/rdp/cudnn-download)
+
+3.安装nvidia驱动
+3.1 禁用nouveau
+$ lsmod | grep nouveau
+有输出则代表nouveau正在加载。
+则需要禁用nouveau：
+	cd /etc/modprobe.d
+	/etc/modprobe.d$ sudo touch blacklist-nouveau.conf
+	sudo gedit blacklist-nouveau.conf
+	在文件中输入以下内容并保存：
+	blacklist nouveau  
+	options nouveau modeset=0 
+	之后更新：
+	sudo update-initramfs -u
+	再次查看
+	lsmod | grep nouveau
+
+///这种方式也可能不能彻底禁用nouveau，在此基础上可以移除以下文件：nouveau.ko；nouveau.ko.org，此文件一般是隐藏的具体操作
+
+cd /lib/modules/4.4.0-83-generic/kernel/drivers/gpu/drm/nouveau 
+sudo rm -rf nouveau.ko 
+sudo rm -rf nouveau.ko.org
+sudo update-initramfs –u
+
+此时重启，再用终端检测一下
+lsmod | grep nouveau
+没有输出即为禁用成功。
+
+3.2 安装驱动
+1) 卸载掉原有驱动
+sudo apt-get remove --purge nvidia-*
+2)安装依赖
+sudo apt-get install lib32ncurses5
+sudo apt-get install lib32z1
+3)Disabled Secure Boot (开机bios设置)
+4）安装驱动
+1 卸载掉原有驱动
+sudo apt-get remove --purge nvidia-*
+2 Ctrl+alt+F1进入字符界面，关闭图形界面
+sudo service lightdm stop
+手动删除X图像界面：
+cd /tmp  
+sudo rm -rf .X*
+（每次重启都会再次生成，所以会在alt+ctrl+f1界面下操作）
+3 安装nvidia driver
+sudo chmod a+x NVIDIA-Linux-x86_64-384.90.run //获取权限
+sudo ./NVIDIA-Linux-x86_64-384.90.run –no-x-check –no-nouveau-check –no-opengl-files //安装驱动
+
+    –no-x-check 安装驱动时关闭X服务
+    –no-nouveau-check 安装驱动时禁用nouveau
+    –no-opengl-files 只安装驱动文件，不安装OpenGL文件
+
+Accept->Continue installation->sign the kernel module（为内核模块签名）？选择是->使用已有的密钥给模块签名还是重新生成？选重新生成密钥->是否删除已生成的密钥文件？选择否->安装完成
+检查 NVIDIA Driver是否安装成功：
+nvidia-smi
+有回显消息则说明成功。
+
+4.安装CUDA9.0
+
+sudo sh cuda_9.0.176_384.81_linux.run
+单击回车，一路往下运行，直到提示“是否为NVIDIA安装驱动nvidia-390？”
+选择否，因为已经安装好驱动程序了，其他的全都是默认，安装位置默认是安装在/usr/local/cuda文件夹下。
+配置环境变量：sudo gedit  /etc/profile
+打开文件后在文件末尾添加路径：
+　　　　export  PATH=/usr/local/cuda-9.0/bin:$PATH
+　　　　export  LD_LIBRARY_PATH=/usr/local/cuda-9.0/lib64$LD_LIBRARY_PATH　　
+保存，然后重启电脑：sudo reboot
+测试CUDA的例子
+　　cd  /usr/local/cuda-9.0/samples/1_Utilities/deviceQuery
+　　sudo make
+　　./deviceQuery
+如果显示的是关于GPU的信息，则说明安装成功了。
+安装缺少的库：
+sudo apt-get install freeglut3-dev build-essential libx11-dev libxmu-dev libxi-dev libgl1-mesa-glx libglu1-mesa libglu1-mesa-dev
+
+环境变量配置
+安装完毕后，再声明一下环境变量，并将其写入到 ~/.bashrc 的尾部:
+    export PATH=/usr/local/cuda-9.0/bin${PATH:+:${PATH}}
+    export LD_LIBRARY_PATH=/usr/local/cuda-9.0/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
+
+然后设置环境变量和动态链接库：
+$ sudo gedit /etc/profile
+
+在打开的文件末尾加入：
+export PATH=/usr/local/cuda/bin:$PATH
+保存之后，创建链接文件：
+sudo gedit /etc/ld.so.conf.d/cuda.conf
+在打开的文件中添加如下语句：
+/usr/local/cuda/lib64
+然后执行 sudo ldconfig ， 使链接立即生效。
+
+5.安装cudnn
+1) 继续Ctrl+alt+F1进入的字符界面
+2) 进入解压后的cudnn-9.0-linux-x64-v7.0.tgz文件cuda，在终端执行下面的指令安装：
+tar -zxvf cudnn-9.0-linux-x64-v7.0.tgz
+cd cuda    
+sudo cp lib64/lib* /usr/local/cuda/lib64/    
+sudo cp include/cudnn.h /usr/local/cuda/include/ 
+然后更新网络连接：
+cd /usr/local/cuda/lib64/  
+sudo chmod +r libcudnn.so.7.0.3  # 自己查看.so的版本  
+sudo ln -sf libcudnn.so.7.0.3. libcudnn.so.7  
+sudo ln -sf libcudnn.so.7 libcudnn.so  
+sudo ldconfig  
+
+重新启动图形化界面
+sudo service lightdm start
+再Ctrl+alt+F7退出Text Mode。
+安装教程参见：https://blog.csdn.net/fdqw_sph/article/details/78745375
+
+
+
+重点加注：服务器关闭一段时间后可能出现主机与GPU无法通信的状况，无需重新安装以上全部文件：
+          1)sudo apt-get remove --purge nvidia-*
+          2)安装依赖
+		sudo apt-get install lib32ncurses5
+		sudo apt-get install lib32z1
+ 	  3)Ctrl+alt+F1进入字符界面，关闭图形界面
+		sudo service lightdm stop
+	        手动删除X图像界面：
+		cd /tmp  
+		sudo rm -rf .X*
+	  4)安装nvidia driver
+		sudo chmod a+x NVIDIA-Linux-x86_64-384.90.run //获取权限
+		sudo ./NVIDIA-Linux-x86_64-384.90.run –no-x-check –no-nouveau-check –no-opengl-files //安装驱动
+	  5) sudo reboot
