@@ -1,0 +1,8 @@
+The DL server for deep learning.
+The git push following:
+1)git init 
+2)touch README
+3)git add .
+4)git commit -m "presentation"
+5)git remote add origin git@github.com:hanzijun/DLServer.git
+6)git push -u origin master
